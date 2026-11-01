@@ -1,0 +1,99 @@
+version: "3.9"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  student_db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: pgpwd
+      POSTGRES_DB: orders_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d orders_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  user_service:
+    build: ./user_service
+    ports:
+      - "8001:80"
+    environment:
+      AMQP_URL: amqp://admin:admin123@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  catalog_service:
+    build: ./catalog_service
+    ports:
+      - "8002:80"
+    environment:
+      AMQP_URL: amqp://admin:admin123@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  inventory_service:
+    build: ./inventory_service
+    ports:
+      - "8003:80"
+    environment:
+      AMQP_URL: amqp://admin:admin123@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  order_service:
+    build: ./order_service
+    ports:
+      - "8004:80"
+    environment:
+      AMQP_URL: amqp://admin:admin123@rabbitmq:5672/
+      POSTGRES_URL: postgresql://myuser:pgpwd@student_db:5432/orders_db
+      CATALOG_URL: http://catalog_service/api
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      student_db:
+        condition: service_healthy
+
+  payment_service:
+    build: ./payment_service
+    ports:
+      - "8005:80"
+    environment:
+      AMQP_URL: amqp://admin:admin123@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  review_service:
+    build: ./review_service
+    ports:
+      - "8006:80"
+    environment:
+      AMQP_URL: amqp://admin:admin123@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  pgdata:
